@@ -1,0 +1,2 @@
+[console_scripts]
+vagi = vagi_orchestrator.cli:app

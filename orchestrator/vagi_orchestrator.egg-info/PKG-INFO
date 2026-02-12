@@ -1,0 +1,41 @@
+Metadata-Version: 2.4
+Name: vagi-orchestrator
+Version: 0.1.0
+Summary: vAGI orchestrator service: OODA loop, evolution scheduler, and API surface.
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi==0.128.0
+Requires-Dist: httpx==0.28.1
+Requires-Dist: orjson==3.11.3
+Requires-Dist: pydantic==2.11.7
+Requires-Dist: typer==0.16.1
+Requires-Dist: uvicorn==0.40.0
+Provides-Extra: dev
+Requires-Dist: pytest==9.0.2; extra == "dev"
+
+# vAGI Orchestrator
+
+Service điều phối cho vAGI V1:
+
+- OODA reasoning loop (`observe -> orient -> decide -> act`)
+- OpenAI-compatible HTTP API (`/v1/chat/completions`)
+- Agent scan code endpoint (`/v1/agents/scan-code`)
+- Evolution batch (`/v1/evolution/run-dream`)
+- CLI (`vagi chat|scan|dream|benchmark`)
+
+## Chạy local
+
+```bash
+pip install -e .[dev]
+uvicorn vagi_orchestrator.app:app --host 127.0.0.1 --port 8080
+```
+
+## Biến môi trường chính
+
+- `VAGI_KERNEL_URL` (default `http://127.0.0.1:7070`)
+- `VAGI_ORCH_HOST` (default `127.0.0.1`)
+- `VAGI_ORCH_PORT` (default `8080`)
+- `VAGI_RUNTIME_DIR` (default `runtime`)
+- `VAGI_DREAM_HOUR` (default `2`)
+- `VAGI_DREAM_MINUTE` (default `0`)
+
