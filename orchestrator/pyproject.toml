@@ -21,6 +21,10 @@ dependencies = [
 dev = [
   "pytest==9.0.2",
 ]
+genesis = [
+  "torch>=2.0",
+  "safetensors>=0.4",
+]
 
 [project.scripts]
 vagi = "vagi_orchestrator.cli:app"
