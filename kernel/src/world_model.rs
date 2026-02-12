@@ -123,4 +123,3 @@ mod tests {
         assert!(model.has_anchor_nodes());
     }
 }
-

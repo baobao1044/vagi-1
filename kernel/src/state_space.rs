@@ -108,4 +108,3 @@ mod tests {
         assert_ne!(first.checksum, second.checksum);
     }
 }
-

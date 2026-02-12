@@ -8,9 +8,11 @@ use axum::{Json, Router};
 
 use crate::KernelContext;
 use crate::models::{
-    ErrorResponse, HealthResponse, InitStateRequest, SnapshotRequest, SnapshotResponse,
-    UpdateStateRequest, VerifierRequest, VerifierResponse, WorldSimulateRequest, WorldSimulateResponse,
-    ModelLoadRequest, ModelLoadResponse, ModelStatusResponse, ModelInferRequest, ModelInferResponse,
+    ErrorResponse, HealthResponse, InitStateRequest, MemoryAddRequest, MemoryAddResponse,
+    MemorySearchItem, MemorySearchRequest, MemorySearchResponse, ModelInferRequest,
+    ModelInferResponse, ModelLoadRequest, ModelLoadResponse, ModelStatusResponse, SnapshotRequest,
+    SnapshotResponse, UpdateStateRequest, VerifierRequest, VerifierResponse, WorldSimulateRequest,
+    WorldSimulateResponse,
 };
 
 pub fn build_router(ctx: Arc<KernelContext>) -> Router {
@@ -22,6 +24,8 @@ pub fn build_router(ctx: Arc<KernelContext>) -> Router {
         .route("/internal/state/snapshot", post(snapshot_state))
         .route("/internal/world/simulate", post(simulate_world))
         .route("/internal/verifier/check", post(verify_patch))
+        .route("/internal/memory/add", post(memory_add))
+        .route("/internal/memory/search", post(memory_search))
         .route("/internal/model/load", post(load_model))
         .route("/internal/model/status", get(model_status))
         .route("/internal/infer", post(model_infer))
@@ -100,6 +104,37 @@ async fn verify_patch(
     Json(request): Json<VerifierRequest>,
 ) -> Json<VerifierResponse> {
     Json(ctx.verifier.check(&request))
+}
+
+async fn memory_add(
+    State(ctx): State<Arc<KernelContext>>,
+    Json(request): Json<MemoryAddRequest>,
+) -> Result<Json<MemoryAddResponse>, ApiError> {
+    let store = Arc::clone(&ctx.memory_store);
+    let id = tokio::task::spawn_blocking(move || store.add(request.text, request.vector))
+        .await
+        .map_err(|err| ApiError::internal(format!("memory add task failed: {err}")))?
+        .map_err(ApiError::bad_request)?;
+    Ok(Json(MemoryAddResponse { id }))
+}
+
+async fn memory_search(
+    State(ctx): State<Arc<KernelContext>>,
+    Json(request): Json<MemorySearchRequest>,
+) -> Result<Json<MemorySearchResponse>, ApiError> {
+    let store = Arc::clone(&ctx.memory_store);
+    let query_vector = request.vector;
+    let top_k = request.top_k;
+    let rows = tokio::task::spawn_blocking(move || store.search(&query_vector, top_k))
+        .await
+        .map_err(|err| ApiError::internal(format!("memory search task failed: {err}")))?
+        .map_err(ApiError::bad_request)?;
+
+    let results = rows
+        .into_iter()
+        .map(|(text, score)| MemorySearchItem { text, score })
+        .collect();
+    Ok(Json(MemorySearchResponse { results }))
 }
 
 async fn load_model(

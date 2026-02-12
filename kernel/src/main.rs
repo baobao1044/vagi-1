@@ -17,8 +17,11 @@ async fn main() -> Result<()> {
     let snapshot_db = std::env::var("VAGI_SNAPSHOT_DB")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("runtime/snapshots.redb"));
+    let memory_db = std::env::var("VAGI_MEMORY_DB")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("runtime/memory.redb"));
 
-    let ctx = Arc::new(KernelContext::new(&snapshot_db)?);
+    let ctx = Arc::new(KernelContext::new(&snapshot_db, &memory_db)?);
     let router = build_router(ctx);
 
     let host = std::env::var("VAGI_KERNEL_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
@@ -33,4 +36,3 @@ async fn main() -> Result<()> {
     axum::serve(listener, router).await?;
     Ok(())
 }
-

@@ -1,6 +1,7 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HiddenState {
@@ -136,4 +137,32 @@ pub struct ModelInferResponse {
     pub text: String,
     pub tokens_generated: usize,
     pub latency_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MemoryAddRequest {
+    pub text: String,
+    pub vector: Vec<f32>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MemoryAddResponse {
+    pub id: Uuid,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MemorySearchRequest {
+    pub vector: Vec<f32>,
+    pub top_k: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MemorySearchItem {
+    pub text: String,
+    pub score: f32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MemorySearchResponse {
+    pub results: Vec<MemorySearchItem>,
 }

@@ -1,5 +1,6 @@
-pub mod models;
+pub mod memory;
 pub mod model_runtime;
+pub mod models;
 pub mod routes;
 pub mod snapshot;
 pub mod state_space;
@@ -10,6 +11,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
+use memory::vector_store::VectorStore;
 use model_runtime::ModelRuntime;
 use snapshot::SnapshotStore;
 use state_space::StateManager;
@@ -21,16 +23,18 @@ pub const HIDDEN_SIZE: usize = 2_048;
 pub struct KernelContext {
     pub state_manager: Arc<StateManager>,
     pub snapshot_store: Arc<SnapshotStore>,
+    pub memory_store: Arc<VectorStore>,
     pub world_model: Arc<WorldModel>,
     pub verifier: Arc<Verifier>,
     pub model_runtime: Arc<ModelRuntime>,
 }
 
 impl KernelContext {
-    pub fn new(snapshot_path: &Path) -> Result<Self> {
+    pub fn new(snapshot_path: &Path, memory_path: &Path) -> Result<Self> {
         Ok(Self {
             state_manager: Arc::new(StateManager::new(HIDDEN_SIZE)),
             snapshot_store: Arc::new(SnapshotStore::new(snapshot_path)?),
+            memory_store: Arc::new(VectorStore::new(memory_path)?),
             world_model: Arc::new(WorldModel::new()),
             verifier: Arc::new(Verifier::new()?),
             model_runtime: Arc::new(ModelRuntime::new()),
