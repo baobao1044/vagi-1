@@ -103,3 +103,37 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ModelLoadRequest {
+    pub model_dir: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModelLoadResponse {
+    pub model_id: String,
+    pub loaded: bool,
+    pub checksum_ok: bool,
+    pub arch: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModelStatusResponse {
+    pub loaded: bool,
+    pub model_id: Option<String>,
+    pub arch: Option<String>,
+    pub vocab_size: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModelInferRequest {
+    pub prompt: String,
+    pub max_new_tokens: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModelInferResponse {
+    pub model_id: String,
+    pub text: String,
+    pub tokens_generated: usize,
+    pub latency_ms: u64,
+}

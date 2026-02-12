@@ -1,4 +1,5 @@
 pub mod models;
+pub mod model_runtime;
 pub mod routes;
 pub mod snapshot;
 pub mod state_space;
@@ -9,6 +10,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::Result;
+use model_runtime::ModelRuntime;
 use snapshot::SnapshotStore;
 use state_space::StateManager;
 use verifier::Verifier;
@@ -21,6 +23,7 @@ pub struct KernelContext {
     pub snapshot_store: Arc<SnapshotStore>,
     pub world_model: Arc<WorldModel>,
     pub verifier: Arc<Verifier>,
+    pub model_runtime: Arc<ModelRuntime>,
 }
 
 impl KernelContext {
@@ -30,7 +33,7 @@ impl KernelContext {
             snapshot_store: Arc::new(SnapshotStore::new(snapshot_path)?),
             world_model: Arc::new(WorldModel::new()),
             verifier: Arc::new(Verifier::new()?),
+            model_runtime: Arc::new(ModelRuntime::new()),
         })
     }
 }
-

@@ -9,8 +9,8 @@ use axum::{Json, Router};
 use crate::KernelContext;
 use crate::models::{
     ErrorResponse, HealthResponse, InitStateRequest, SnapshotRequest, SnapshotResponse,
-    UpdateStateRequest, VerifierRequest, VerifierResponse, WorldSimulateRequest,
-    WorldSimulateResponse,
+    UpdateStateRequest, VerifierRequest, VerifierResponse, WorldSimulateRequest, WorldSimulateResponse,
+    ModelLoadRequest, ModelLoadResponse, ModelStatusResponse, ModelInferRequest, ModelInferResponse,
 };
 
 pub fn build_router(ctx: Arc<KernelContext>) -> Router {
@@ -22,6 +22,9 @@ pub fn build_router(ctx: Arc<KernelContext>) -> Router {
         .route("/internal/state/snapshot", post(snapshot_state))
         .route("/internal/world/simulate", post(simulate_world))
         .route("/internal/verifier/check", post(verify_patch))
+        .route("/internal/model/load", post(load_model))
+        .route("/internal/model/status", get(model_status))
+        .route("/internal/model/infer", post(model_infer))
         .with_state(ctx)
 }
 
@@ -99,6 +102,32 @@ async fn verify_patch(
     Json(ctx.verifier.check(&request))
 }
 
+async fn load_model(
+    State(ctx): State<Arc<KernelContext>>,
+    Json(request): Json<ModelLoadRequest>,
+) -> Result<Json<ModelLoadResponse>, ApiError> {
+    let response = ctx
+        .model_runtime
+        .load_from_dir(&request.model_dir)
+        .map_err(ApiError::bad_request)?;
+    Ok(Json(response))
+}
+
+async fn model_status(State(ctx): State<Arc<KernelContext>>) -> Json<ModelStatusResponse> {
+    Json(ctx.model_runtime.status())
+}
+
+async fn model_infer(
+    State(ctx): State<Arc<KernelContext>>,
+    Json(request): Json<ModelInferRequest>,
+) -> Result<Json<ModelInferResponse>, ApiError> {
+    let response = ctx
+        .model_runtime
+        .infer(&request.prompt, request.max_new_tokens.unwrap_or(64))
+        .map_err(ApiError::bad_request)?;
+    Ok(Json(response))
+}
+
 #[derive(Debug)]
 struct ApiError {
     status: StatusCode,
@@ -136,4 +165,3 @@ impl IntoResponse for ApiError {
         (self.status, payload).into_response()
     }
 }
-
