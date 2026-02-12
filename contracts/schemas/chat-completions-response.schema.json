@@ -38,7 +38,7 @@
     },
     "metadata": {
       "type": "object",
-      "required": ["session_id", "episode_id", "trust_score", "policy", "safety"],
+      "required": ["session_id", "episode_id", "trust_score", "policy", "safety", "model_runtime"],
       "properties": {
         "session_id": { "type": "string" },
         "episode_id": { "type": "integer" },
@@ -59,6 +59,15 @@
           "properties": {
             "risk_score": { "type": "number" },
             "verifier_pass": { "type": "boolean" }
+          }
+        },
+        "model_runtime": {
+          "type": "object",
+          "required": ["used", "model_id", "fallback_reason"],
+          "properties": {
+            "used": { "type": "boolean" },
+            "model_id": { "type": ["string", "null"] },
+            "fallback_reason": { "type": ["string", "null"] }
           }
         }
       }

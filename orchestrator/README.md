@@ -12,7 +12,7 @@ Service điều phối cho vAGI V1:
 ## Chạy local
 
 ```bash
-pip install -e .[dev]
+pip install -e .[dev,genesis]
 uvicorn vagi_orchestrator.app:app --host 127.0.0.1 --port 8080
 ```
 
@@ -24,3 +24,12 @@ uvicorn vagi_orchestrator.app:app --host 127.0.0.1 --port 8080
 - `VAGI_RUNTIME_DIR` (default `runtime`)
 - `VAGI_DREAM_HOUR` (default `2`)
 - `VAGI_DREAM_MINUTE` (default `0`)
+
+## Genesis commands
+
+```bash
+vagi genesis train --output-dir ../runtime/models/genesis-v0
+vagi genesis load --kernel-url http://127.0.0.1:7070 --model-dir ../runtime/models/genesis-v0
+vagi genesis infer --kernel-url http://127.0.0.1:7070 --prompt "User: Xin chao\nAssistant:"
+vagi genesis run --model-dir ../runtime/models/genesis-v0 --kernel-url http://127.0.0.1:7070 --api-url http://127.0.0.1:8080
+```

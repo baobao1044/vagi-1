@@ -39,6 +39,12 @@ class FakeKernelPass:
     ) -> dict:
         return {"pass": True, "violations": [], "timeout_hit": False, "wasi_ok": True}
 
+    async def model_status(self) -> dict:
+        return {"loaded": True, "model_id": "genesis-v0"}
+
+    async def model_infer(self, prompt: str, max_new_tokens: int = 96) -> dict:
+        return {"model_id": "genesis-v0", "text": "Assistant: Da nhan yeu cau va se de xuat patch."}
+
 
 class FakeKernelFailVerifier(FakeKernelPass):
     async def verify(
@@ -95,6 +101,8 @@ def test_chat_endpoint_returns_openai_shape_with_policy_metadata(tmp_path: Path)
     assert body["choices"][0]["message"]["role"] == "assistant"
     assert body["metadata"]["policy"]["status"] == "pass"
     assert body["metadata"]["policy"]["verifier_pass"] is True
+    assert body["metadata"]["model_runtime"]["used"] is True
+    assert body["metadata"]["model_runtime"]["model_id"] == "genesis-v0"
     client.close()
 
 
@@ -125,4 +133,3 @@ def test_chat_endpoint_returns_422_when_verifier_gate_fails(tmp_path: Path) -> N
         for detail in body["error"]["details"]
     )
     client.close()
-

@@ -51,10 +51,14 @@ class Reasoner:
         observe_ctx = self._observe(messages=messages, prompt=prompt)
         await self.kernel.init_state(session_id=session_id)
         await self.kernel.update_state(session_id=session_id, input_text=prompt)
+        model_runtime_meta, model_seed = await self._fast_system_seed(prompt)
 
         # ORIENT
         orient_ctx = await self._orient(
-            prompt=prompt, observe_ctx=observe_ctx, session_id=session_id
+            prompt=prompt,
+            observe_ctx=observe_ctx,
+            session_id=session_id,
+            model_seed=model_seed,
         )
         draft = orient_ctx["selected_candidate"]["draft"]
 
@@ -98,6 +102,7 @@ class Reasoner:
             sim=final_sim,
             verifier=final_verifier,
             ooda_trace=ooda_trace,
+            model_runtime_meta=model_runtime_meta,
         )
         trust_score = compute_trust_score(
             source="chat",
@@ -144,7 +149,12 @@ class Reasoner:
         }
 
     async def _orient(
-        self, *, prompt: str, observe_ctx: dict[str, Any], session_id: str
+        self,
+        *,
+        prompt: str,
+        observe_ctx: dict[str, Any],
+        session_id: str,
+        model_seed: str | None,
     ) -> dict[str, Any]:
         lower = prompt.lower()
         if "speed" in lower or "latency" in lower:
@@ -154,7 +164,11 @@ class Reasoner:
         else:
             priority = "correctness"
 
-        candidates = self._build_candidates(prompt=prompt, priority=priority)
+        candidates = self._build_candidates(
+            prompt=prompt,
+            priority=priority,
+            model_seed=model_seed,
+        )
         simulations: list[dict[str, Any]] = []
         for candidate in candidates:
             sim = await self.kernel.simulate_world(candidate["draft"], session_id=session_id)
@@ -185,8 +199,10 @@ class Reasoner:
             "selected_candidate": selected_candidate,
         }
 
-    def _build_candidates(self, *, prompt: str, priority: str) -> list[dict[str, str]]:
-        return [
+    def _build_candidates(
+        self, *, prompt: str, priority: str, model_seed: str | None
+    ) -> list[dict[str, str]]:
+        candidates = [
             {
                 "id": "secure-minimal",
                 "draft": (
@@ -221,6 +237,61 @@ class Reasoner:
                 ),
             },
         ]
+        if model_seed:
+            candidates.insert(
+                0,
+                {
+                    "id": "model-seed",
+                    "draft": (
+                        "Model-seeded draft:\n"
+                        f"{model_seed}\n"
+                        "- Enforce deterministic safeguards before final act."
+                    ),
+                },
+            )
+        return candidates
+
+    async def _fast_system_seed(self, prompt: str) -> tuple[dict[str, Any], str | None]:
+        try:
+            status = await self.kernel.model_status()
+            if not bool(status.get("loaded", False)):
+                return (
+                    {
+                        "used": False,
+                        "model_id": None,
+                        "fallback_reason": "model_not_loaded",
+                    },
+                    None,
+                )
+            infer = await self.kernel.model_infer(prompt=prompt, max_new_tokens=96)
+            text = str(infer.get("text", "")).strip()
+            model_id = infer.get("model_id") or status.get("model_id")
+            if not text:
+                return (
+                    {
+                        "used": False,
+                        "model_id": model_id,
+                        "fallback_reason": "empty_model_output",
+                    },
+                    None,
+                )
+            return (
+                {
+                    "used": True,
+                    "model_id": model_id,
+                    "fallback_reason": None,
+                },
+                text,
+            )
+        except Exception as exc:
+            return (
+                {
+                    "used": False,
+                    "model_id": None,
+                    "fallback_reason": f"kernel_model_infer_error:{type(exc).__name__}",
+                },
+                None,
+            )
 
     def _revise_draft(
         self,
@@ -254,6 +325,7 @@ class Reasoner:
         sim: dict[str, Any],
         verifier: dict[str, Any],
         ooda_trace: dict[str, Any],
+        model_runtime_meta: dict[str, Any],
     ) -> dict[str, Any]:
         return {
             "content": (
@@ -268,5 +340,6 @@ class Reasoner:
                 "verifier": verifier,
                 "ooda_trace": ooda_trace,
                 "verifier_required": True,
+                "model_runtime": model_runtime_meta,
             },
         }

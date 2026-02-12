@@ -72,3 +72,25 @@ class KernelClient:
         response.raise_for_status()
         return response.json()
 
+    async def model_load(self, model_dir: str) -> dict[str, Any]:
+        response = await self._client.post(
+            "/internal/model/load",
+            json={"model_dir": model_dir},
+        )
+        response.raise_for_status()
+        return response.json()
+
+    async def model_status(self) -> dict[str, Any]:
+        response = await self._client.get("/internal/model/status")
+        response.raise_for_status()
+        return response.json()
+
+    async def model_infer(
+        self, prompt: str, max_new_tokens: int = 96
+    ) -> dict[str, Any]:
+        response = await self._client.post(
+            "/internal/model/infer",
+            json={"prompt": prompt, "max_new_tokens": max_new_tokens},
+        )
+        response.raise_for_status()
+        return response.json()

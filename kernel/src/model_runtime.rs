@@ -225,14 +225,19 @@ impl ModelRuntime {
         }
 
         let mut generated_ids: Vec<usize> = Vec::new();
-        let mut next_id = argmax(&logits);
+        let excluded = [
+            model.manifest.bos_id,
+            model.manifest.pad_id,
+            model.manifest.eos_id,
+        ];
+        let mut next_id = argmax_with_exclusions(&logits, &excluded);
         for _ in 0..max_tokens {
             if next_id == model.manifest.eos_id {
                 break;
             }
             generated_ids.push(next_id);
             logits = model.forward_one_token(next_id, &mut hidden)?;
-            next_id = argmax(&logits);
+            next_id = argmax_with_exclusions(&logits, &excluded);
         }
 
         let text = model.decode(&generated_ids);
@@ -430,6 +435,26 @@ fn argmax(values: &[f32]) -> usize {
     best_idx
 }
 
+fn argmax_with_exclusions(values: &[f32], excluded: &[usize]) -> usize {
+    let excluded: HashSet<usize> = excluded.iter().copied().collect();
+    let mut best_idx = 0usize;
+    let mut best_val = f32::NEG_INFINITY;
+    for (idx, value) in values.iter().enumerate() {
+        if excluded.contains(&idx) {
+            continue;
+        }
+        if *value > best_val {
+            best_idx = idx;
+            best_val = *value;
+        }
+    }
+    if best_val == f32::NEG_INFINITY {
+        argmax(values)
+    } else {
+        best_idx
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{GruLayerWeights, gru_step};
@@ -451,4 +476,3 @@ mod tests {
         assert_eq!(h_next.len(), hidden_dim);
     }
 }
-

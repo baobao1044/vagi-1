@@ -50,3 +50,13 @@ API ngoài:
 cargo test -p vagi-kernel
 cd orchestrator && pytest
 ```
+
+## Genesis Run (Micro-Model)
+
+```bash
+cd orchestrator
+pip install -e .[dev,genesis]
+vagi genesis train --output-dir ../runtime/models/genesis-v0
+vagi genesis load --kernel-url http://127.0.0.1:7070 --model-dir ../runtime/models/genesis-v0
+vagi genesis infer --kernel-url http://127.0.0.1:7070 --prompt "User: Xin chao\nAssistant:"
+```

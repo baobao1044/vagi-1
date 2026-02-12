@@ -42,7 +42,17 @@ curl -X POST http://127.0.0.1:8080/v1/evolution/run-dream \
   -d "{\"source\":\"manual\"}"
 ```
 
-## 5) Failure handling
+## 5) Genesis run (micro-model)
+
+```bash
+cd orchestrator
+pip install -e .[dev,genesis]
+vagi genesis train --output-dir ../runtime/models/genesis-v0
+vagi genesis load --kernel-url http://127.0.0.1:7070 --model-dir ../runtime/models/genesis-v0
+vagi genesis infer --kernel-url http://127.0.0.1:7070 --prompt "User: Xin chao\nAssistant:"
+```
+
+## 6) Failure handling
 
 - If `/v1/healthz` is `degraded`: check `VAGI_KERNEL_URL` and kernel process status.
 - If `POST /v1/chat/completions` returns `422`:
@@ -51,4 +61,3 @@ curl -X POST http://127.0.0.1:8080/v1/evolution/run-dream \
   - tighten generation guards if repeated policy failures appear
 - If verifier failures increase: inspect `violations` and adjust reasoner draft rules.
 - If dream promotion is blocked: inspect `pass_rate` and `regression_fail` from run report.
-

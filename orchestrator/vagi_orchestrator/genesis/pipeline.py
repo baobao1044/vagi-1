@@ -98,6 +98,7 @@ def train_and_export(output_dir: Path, config: GenesisConfig | None = None) -> d
         "bos_id": tokenizer.bos_id,
         "eos_id": tokenizer.eos_id,
         "pad_id": tokenizer.pad_id,
+        "unk_id": tokenizer.unk_id,
         "max_seq_len": config.max_seq_len,
         "model_file": "model.safetensors",
         "vocab_file": "vocab.json",
@@ -246,4 +247,3 @@ def _sha256_file(path: Path) -> str:
 def _set_seed(seed: int) -> None:
     random.seed(seed)
     torch.manual_seed(seed)
-

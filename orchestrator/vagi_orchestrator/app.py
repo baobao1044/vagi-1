@@ -210,6 +210,7 @@ def create_app(
                     ),
                     "verifier_pass": verifier_pass,
                 },
+                "model_runtime": result.get("metadata", {}).get("model_runtime", {}),
             },
         )
         return response

@@ -2,18 +2,29 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
 from typing import Annotated
 
 import httpx
 import typer
 
+from .genesis.pipeline import GenesisConfig, train_and_export
+
 app = typer.Typer(help="vAGI CLI")
+genesis_app = typer.Typer(help="Genesis run commands")
+app.add_typer(genesis_app, name="genesis")
 
 
 def _api_url(url: str | None) -> str:
     if url:
         return url.rstrip("/")
     return "http://127.0.0.1:8080"
+
+
+def _kernel_url(url: str | None) -> str:
+    if url:
+        return url.rstrip("/")
+    return "http://127.0.0.1:7070"
 
 
 @app.command()
@@ -94,5 +105,114 @@ def benchmark(
     )
 
 
+@genesis_app.command("train")
+def genesis_train(
+    output_dir: Annotated[str, typer.Option("--output-dir")] = "runtime/models/genesis-v0",
+    repeats: Annotated[int, typer.Option("--repeats")] = 28,
+    epochs: Annotated[int, typer.Option("--epochs")] = 12,
+    embed_dim: Annotated[int, typer.Option("--embed-dim")] = 128,
+    hidden_dim: Annotated[int, typer.Option("--hidden-dim")] = 256,
+    num_layers: Annotated[int, typer.Option("--num-layers")] = 2,
+    seq_len: Annotated[int, typer.Option("--seq-len")] = 64,
+    batch_size: Annotated[int, typer.Option("--batch-size")] = 32,
+    lr: Annotated[float, typer.Option("--lr")] = 3e-3,
+) -> None:
+    result = train_and_export(
+        output_dir=Path(output_dir),
+        config=GenesisConfig(
+            repeats=repeats,
+            epochs=epochs,
+            embed_dim=embed_dim,
+            hidden_dim=hidden_dim,
+            num_layers=num_layers,
+            seq_len=seq_len,
+            batch_size=batch_size,
+            lr=lr,
+        ),
+    )
+    typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+@genesis_app.command("load")
+def genesis_load(
+    model_dir: Annotated[str, typer.Option("--model-dir")] = "runtime/models/genesis-v0",
+    kernel_url: Annotated[str | None, typer.Option("--kernel-url")] = None,
+) -> None:
+    url = _kernel_url(kernel_url)
+    response = httpx.post(
+        f"{url}/internal/model/load",
+        json={"model_dir": model_dir},
+        timeout=120,
+    )
+    response.raise_for_status()
+    typer.echo(json.dumps(response.json(), ensure_ascii=False, indent=2))
+
+
+@genesis_app.command("infer")
+def genesis_infer(
+    prompt: Annotated[str, typer.Option("--prompt")] = "User: Xin chao\nAssistant:",
+    max_new_tokens: Annotated[int, typer.Option("--max-new-tokens")] = 96,
+    kernel_url: Annotated[str | None, typer.Option("--kernel-url")] = None,
+) -> None:
+    url = _kernel_url(kernel_url)
+    response = httpx.post(
+        f"{url}/internal/model/infer",
+        json={"prompt": prompt, "max_new_tokens": max_new_tokens},
+        timeout=120,
+    )
+    response.raise_for_status()
+    typer.echo(json.dumps(response.json(), ensure_ascii=False, indent=2))
+
+
+@genesis_app.command("run")
+def genesis_run(
+    model_dir: Annotated[str, typer.Option("--model-dir")] = "runtime/models/genesis-v0",
+    kernel_url: Annotated[str | None, typer.Option("--kernel-url")] = None,
+    api_url: Annotated[str | None, typer.Option("--api-url")] = None,
+) -> None:
+    output_path = Path(model_dir)
+    train_result = train_and_export(output_dir=output_path, config=GenesisConfig())
+
+    kernel = _kernel_url(kernel_url)
+    api = _api_url(api_url)
+    load_response = httpx.post(
+        f"{kernel}/internal/model/load",
+        json={"model_dir": str(output_path)},
+        timeout=120,
+    )
+    load_response.raise_for_status()
+    infer_response = httpx.post(
+        f"{kernel}/internal/model/infer",
+        json={"prompt": "User: Xin chao\nAssistant:", "max_new_tokens": 80},
+        timeout=120,
+    )
+    infer_response.raise_for_status()
+    chat_response = httpx.post(
+        f"{api}/v1/chat/completions",
+        json={
+            "model": "vagi-v1",
+            "messages": [{"role": "user", "content": "Xin chao, toi can toi uu API chat."}],
+            "stream": False,
+        },
+        timeout=120,
+    )
+    chat_response.raise_for_status()
+    payload = {
+        "train": {
+            "model_dir": train_result["model_dir"],
+            "best_val_loss": train_result["best_val_loss"],
+        },
+        "kernel_load": load_response.json(),
+        "kernel_infer": infer_response.json(),
+        "chat": {
+            "status_code": chat_response.status_code,
+            "policy": chat_response.json().get("metadata", {}).get("policy", {}),
+            "model_runtime": chat_response.json().get("metadata", {}).get("model_runtime", {}),
+        },
+    }
+    typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+
+
 if __name__ == "__main__":
     app()
+

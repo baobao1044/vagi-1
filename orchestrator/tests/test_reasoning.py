@@ -34,6 +34,12 @@ class FakeKernel:
             return {"pass": False, "violations": ["infinite_loop_risk"], "wasi_ok": True}
         return {"pass": True, "violations": [], "wasi_ok": True}
 
+    async def model_status(self) -> dict:
+        return {"loaded": True, "model_id": "genesis-v0"}
+
+    async def model_infer(self, prompt: str, max_new_tokens: int = 96) -> dict:
+        return {"model_id": "genesis-v0", "text": "Assistant: Toi se phan tich va de xuat patch an toan."}
+
 
 def test_reasoner_backtracks_until_safe(tmp_path: Path) -> None:
     store = EpisodeStore(
@@ -59,6 +65,7 @@ def test_reasoner_backtracks_until_safe(tmp_path: Path) -> None:
     assert trace["orient_ok"] is True
     assert trace["decide_ok"] is True
     assert trace["act_ok"] is True
+    assert result["metadata"]["model_runtime"]["used"] is True
     metrics = store.metrics()
     assert metrics["total_episodes"] == 1
     store.close()
