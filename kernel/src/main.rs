@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     let port: u16 = std::env::var("VAGI_KERNEL_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(7070);
+        .unwrap_or(17070);
     let addr: SocketAddr = format!("{host}:{port}").parse()?;
 
     let listener = TcpListener::bind(addr).await?;

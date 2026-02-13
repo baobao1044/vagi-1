@@ -21,7 +21,7 @@ def load_settings() -> Settings:
     runtime_dir = Path(os.getenv("VAGI_RUNTIME_DIR", "runtime"))
     runtime_dir.mkdir(parents=True, exist_ok=True)
     return Settings(
-        kernel_url=os.getenv("VAGI_KERNEL_URL", "http://127.0.0.1:7070"),
+        kernel_url=os.getenv("VAGI_KERNEL_URL", "http://127.0.0.1:17070"),
         host=os.getenv("VAGI_ORCH_HOST", "127.0.0.1"),
         port=int(os.getenv("VAGI_ORCH_PORT", "8080")),
         runtime_dir=runtime_dir,
@@ -30,4 +30,3 @@ def load_settings() -> Settings:
         max_decide_iters=int(os.getenv("VAGI_MAX_DECIDE_ITERS", "12")),
         risk_threshold=float(os.getenv("VAGI_RISK_THRESHOLD", "0.65")),
     )
-

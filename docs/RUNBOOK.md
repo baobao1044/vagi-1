@@ -9,7 +9,7 @@ cargo run -p vagi-kernel
 Health check:
 
 ```bash
-curl http://127.0.0.1:7070/healthz
+curl http://127.0.0.1:17070/healthz
 ```
 
 ## 2) Start orchestrator
@@ -48,8 +48,8 @@ curl -X POST http://127.0.0.1:8080/v1/evolution/run-dream \
 cd orchestrator
 pip install -e .[dev,genesis]
 vagi genesis train --output-dir ../runtime/models/genesis-v0
-vagi genesis load --kernel-url http://127.0.0.1:7070 --model-dir ../runtime/models/genesis-v0
-vagi genesis infer --kernel-url http://127.0.0.1:7070 --prompt "User: Xin chao\nAssistant:"
+vagi genesis load --kernel-url http://127.0.0.1:17070 --model-dir ../runtime/models/genesis-v0
+vagi genesis infer --kernel-url http://127.0.0.1:17070 --prompt "User: Xin chao\nAssistant:"
 ```
 
 ## 6) Failure handling

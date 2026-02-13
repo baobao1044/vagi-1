@@ -21,7 +21,7 @@ Triển khai mới 100% cho kiến trúc vAGI theo 4 tầng:
 cargo run -p vagi-kernel
 ```
 
-Mặc định chạy tại `http://127.0.0.1:7070`.
+Mặc định chạy tại `http://127.0.0.1:17070`.
 
 ## Chạy orchestrator
 
@@ -57,6 +57,6 @@ cd orchestrator && pytest
 cd orchestrator
 pip install -e .[dev,genesis]
 vagi genesis train --output-dir ../runtime/models/genesis-v0
-vagi genesis load --kernel-url http://127.0.0.1:7070 --model-dir ../runtime/models/genesis-v0
-vagi genesis infer --kernel-url http://127.0.0.1:7070 --prompt "User: Xin chao\nAssistant:"
+vagi genesis load --kernel-url http://127.0.0.1:17070 --model-dir ../runtime/models/genesis-v0
+vagi genesis infer --kernel-url http://127.0.0.1:17070 --prompt "User: Xin chao\nAssistant:"
 ```

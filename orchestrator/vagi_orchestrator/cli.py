@@ -28,7 +28,7 @@ def _api_url(url: str | None) -> str:
 def _kernel_url(url: str | None) -> str:
     if url:
         return url.rstrip("/")
-    return "http://127.0.0.1:7070"
+    return "http://127.0.0.1:17070"
 
 
 def _split_paragraphs(text: str) -> list[str]:

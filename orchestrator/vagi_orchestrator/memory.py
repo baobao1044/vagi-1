@@ -56,7 +56,7 @@ class MemoryClient:
     def _normalize_kernel_url(url: str | None) -> str:
         if url:
             return url.rstrip("/")
-        return "http://127.0.0.1:7070"
+        return "http://127.0.0.1:17070"
 
     def add_document(self, text: str) -> bool:
         normalized = text.strip()

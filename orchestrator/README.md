@@ -18,7 +18,7 @@ uvicorn vagi_orchestrator.app:app --host 127.0.0.1 --port 8080
 
 ## Biến môi trường chính
 
-- `VAGI_KERNEL_URL` (default `http://127.0.0.1:7070`)
+- `VAGI_KERNEL_URL` (default `http://127.0.0.1:17070`)
 - `VAGI_ORCH_HOST` (default `127.0.0.1`)
 - `VAGI_ORCH_PORT` (default `8080`)
 - `VAGI_RUNTIME_DIR` (default `runtime`)
@@ -29,7 +29,7 @@ uvicorn vagi_orchestrator.app:app --host 127.0.0.1 --port 8080
 
 ```bash
 vagi genesis train --output-dir ../runtime/models/genesis-v0
-vagi genesis load --kernel-url http://127.0.0.1:7070 --model-dir ../runtime/models/genesis-v0
-vagi genesis infer --kernel-url http://127.0.0.1:7070 --prompt "User: Xin chao\nAssistant:"
-vagi genesis run --model-dir ../runtime/models/genesis-v0 --kernel-url http://127.0.0.1:7070 --api-url http://127.0.0.1:8080
+vagi genesis load --kernel-url http://127.0.0.1:17070 --model-dir ../runtime/models/genesis-v0
+vagi genesis infer --kernel-url http://127.0.0.1:17070 --prompt "User: Xin chao\nAssistant:"
+vagi genesis run --model-dir ../runtime/models/genesis-v0 --kernel-url http://127.0.0.1:17070 --api-url http://127.0.0.1:8080
 ```
