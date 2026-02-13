@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
+import logging
 import time
 import uuid
 from collections import defaultdict
@@ -9,7 +11,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import ORJSONResponse, StreamingResponse
 
 from .config import Settings, load_settings
@@ -30,8 +32,10 @@ from .models import (
 )
 from .policy import IdentityPolicyEngine
 from .reasoning import Reasoner, build_session_id
-from .scanner import scan_codebase
+from .scanner import ScanLimitExceeded, scan_codebase
 from .store import EpisodeStore
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -52,7 +56,10 @@ def create_app(
     store: EpisodeStore | None = None,
 ) -> FastAPI:
     settings = settings or load_settings()
-    kernel_client = kernel_client or KernelClient(base_url=settings.kernel_url)
+    kernel_client = kernel_client or KernelClient(
+        base_url=settings.kernel_url,
+        internal_token=settings.internal_token,
+    )
     store = store or EpisodeStore(
         db_path=settings.runtime_dir / "episodes.db",
         long_term_path=settings.runtime_dir / "long_term_memory.jsonl",
@@ -118,7 +125,13 @@ def create_app(
         )
 
     @app.get("/v1/metrics")
-    async def metrics() -> dict[str, Any]:
+    async def metrics(
+        x_vagi_admin_token: str | None = Header(default=None, alias="X-Vagi-Admin-Token"),
+    ) -> dict[str, Any]:
+        enforce_admin_token(
+            expected=app.state.services.settings.admin_token,
+            provided=x_vagi_admin_token,
+        )
         base = dict(app.state.services.metrics)
         base.update(app.state.services.store.metrics())
         return base
@@ -144,7 +157,8 @@ def create_app(
                 messages=messages,
             )
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            logger.exception("reasoner execution failed")
+            raise HTTPException(status_code=500, detail="internal_server_error") from exc
 
         if result is None:
             raise HTTPException(status_code=500, detail="reasoner returned empty result")
@@ -226,13 +240,30 @@ def create_app(
         return response
 
     @app.post("/v1/agents/scan-code", response_model=ScanCodeResponse)
-    async def scan_code(request: ScanCodeRequest) -> ScanCodeResponse:
+    async def scan_code(
+        request: ScanCodeRequest,
+        x_vagi_admin_token: str | None = Header(default=None, alias="X-Vagi-Admin-Token"),
+    ) -> ScanCodeResponse:
         services = app.state.services
+        enforce_admin_token(
+            expected=services.settings.admin_token,
+            provided=x_vagi_admin_token,
+        )
         services.metrics["scan_requests"] += 1
         try:
-            scanned_files, issues, remediation_plan = scan_codebase(request.path)
+            scanned_files, issues, remediation_plan = scan_codebase(
+                request.path,
+                allowed_root=services.settings.scan_allowed_root,
+                max_files=services.settings.scan_max_files,
+                max_total_bytes=services.settings.scan_max_total_bytes,
+                max_depth=services.settings.scan_max_depth,
+            )
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ScanLimitExceeded as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
         return ScanCodeResponse(
             scanned_files=scanned_files,
             issues=issues,
@@ -240,8 +271,15 @@ def create_app(
         )
 
     @app.post("/v1/evolution/run-dream", response_model=DreamRunResponse)
-    async def run_dream(request: DreamRunRequest) -> DreamRunResponse:
+    async def run_dream(
+        request: DreamRunRequest,
+        x_vagi_admin_token: str | None = Header(default=None, alias="X-Vagi-Admin-Token"),
+    ) -> DreamRunResponse:
         services = app.state.services
+        enforce_admin_token(
+            expected=services.settings.admin_token,
+            provided=x_vagi_admin_token,
+        )
         report = await services.dream_service.run_once(source=request.source)
         services.metrics["dream_runs"] += 1
         services.metrics["promoted_episodes"] += int(report["promoted_count"])
@@ -282,6 +320,13 @@ async def _stream_chat_chunks(
     }
     yield f"data: {json.dumps(done_payload, ensure_ascii=False)}\n\n"
     yield "data: [DONE]\n\n"
+
+
+def enforce_admin_token(*, expected: str, provided: str | None) -> None:
+    expected_token = expected.strip()
+    provided_token = (provided or "").strip()
+    if not expected_token or not hmac.compare_digest(provided_token, expected_token):
+        raise HTTPException(status_code=401, detail="unauthorized")
 
 
 app = create_app()

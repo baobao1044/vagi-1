@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 use vagi_kernel::KernelContext;
@@ -19,7 +19,9 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| PathBuf::from("runtime/snapshots.redb"));
 
     let ctx = Arc::new(KernelContext::new(&snapshot_db)?);
-    let router = build_router(ctx);
+    let internal_token = std::env::var("VAGI_INTERNAL_TOKEN")
+        .map_err(|_| anyhow!("missing required environment variable: VAGI_INTERNAL_TOKEN"))?;
+    let router = build_router(ctx, internal_token);
 
     let host = std::env::var("VAGI_KERNEL_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let port: u16 = std::env::var("VAGI_KERNEL_PORT")
@@ -33,4 +35,3 @@ async fn main() -> Result<()> {
     axum::serve(listener, router).await?;
     Ok(())
 }
-

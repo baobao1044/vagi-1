@@ -8,9 +8,15 @@ from pathlib import Path
 @dataclass(slots=True)
 class Settings:
     kernel_url: str
+    internal_token: str
+    admin_token: str
     host: str
     port: int
     runtime_dir: Path
+    scan_allowed_root: Path
+    scan_max_files: int
+    scan_max_total_bytes: int
+    scan_max_depth: int
     dream_hour: int
     dream_minute: int
     max_decide_iters: int
@@ -25,14 +31,29 @@ class Settings:
     mutation_promote: bool
 
 
+def _required_token_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"missing required environment variable: {name}")
+    return value
+
+
 def load_settings() -> Settings:
     runtime_dir = Path(os.getenv("VAGI_RUNTIME_DIR", "runtime"))
     runtime_dir.mkdir(parents=True, exist_ok=True)
     return Settings(
         kernel_url=os.getenv("VAGI_KERNEL_URL", "http://127.0.0.1:7070"),
+        internal_token=_required_token_env("VAGI_INTERNAL_TOKEN"),
+        admin_token=_required_token_env("VAGI_ADMIN_TOKEN"),
         host=os.getenv("VAGI_ORCH_HOST", "127.0.0.1"),
         port=int(os.getenv("VAGI_ORCH_PORT", "8080")),
         runtime_dir=runtime_dir,
+        scan_allowed_root=Path(os.getenv("VAGI_SCAN_ROOT", ".")).expanduser().resolve(),
+        scan_max_files=max(10, min(int(os.getenv("VAGI_SCAN_MAX_FILES", "400")), 10_000)),
+        scan_max_total_bytes=max(
+            100_000, min(int(os.getenv("VAGI_SCAN_MAX_TOTAL_BYTES", "8000000")), 200_000_000)
+        ),
+        scan_max_depth=max(1, min(int(os.getenv("VAGI_SCAN_MAX_DEPTH", "12")), 64)),
         dream_hour=int(os.getenv("VAGI_DREAM_HOUR", "2")),
         dream_minute=int(os.getenv("VAGI_DREAM_MINUTE", "0")),
         max_decide_iters=int(os.getenv("VAGI_MAX_DECIDE_ITERS", "12")),

@@ -1,10 +1,13 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::http::{Request, StatusCode};
+use axum::middleware::{self, Next};
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use regex::Regex;
 
 use crate::KernelContext;
 use crate::models::{
@@ -18,22 +21,35 @@ use crate::models::{
     WorldSimulateResponse,
 };
 
-pub fn build_router(ctx: Arc<KernelContext>) -> Router {
+const DEFAULT_WEAVE_EXECUTE_RISK_THRESHOLD: f32 = 0.65;
+const INTERNAL_TOKEN_HEADER: &str = "x-vagi-internal-token";
+const MAX_BINDING_VALUE_BYTES: usize = 64;
+const MAX_WEAVE_QUERY_BYTES: usize = 2_048;
+const MAX_ACTION_BYTES: usize = 8_192;
+
+pub fn build_router(ctx: Arc<KernelContext>, internal_token: String) -> Router {
+    let internal_routes = Router::new()
+        .route("/state/init", post(init_state))
+        .route("/state/update", post(update_state))
+        .route("/state/{session_id}", get(get_state))
+        .route("/state/snapshot", post(snapshot_state))
+        .route("/world/simulate", post(simulate_world))
+        .route("/verifier/check", post(verify_patch))
+        .route("/jit/execute", post(execute_jit))
+        .route("/hdc/templates/upsert", post(hdc_upsert_template))
+        .route("/hdc/templates/query", post(hdc_query_templates))
+        .route("/hdc/templates/bind", post(hdc_bind_template))
+        .route("/hdc/evolution/mutate", post(hdc_evolution_mutate))
+        .route("/hdc/weave/execute", post(hdc_weave_execute))
+        .route("/hdc/weave/plan", post(hdc_weave_plan))
+        .layer(middleware::from_fn_with_state(
+            internal_token,
+            require_internal_token,
+        ));
+
     Router::new()
         .route("/healthz", get(healthz))
-        .route("/internal/state/init", post(init_state))
-        .route("/internal/state/update", post(update_state))
-        .route("/internal/state/{session_id}", get(get_state))
-        .route("/internal/state/snapshot", post(snapshot_state))
-        .route("/internal/world/simulate", post(simulate_world))
-        .route("/internal/verifier/check", post(verify_patch))
-        .route("/internal/jit/execute", post(execute_jit))
-        .route("/internal/hdc/templates/upsert", post(hdc_upsert_template))
-        .route("/internal/hdc/templates/query", post(hdc_query_templates))
-        .route("/internal/hdc/templates/bind", post(hdc_bind_template))
-        .route("/internal/hdc/evolution/mutate", post(hdc_evolution_mutate))
-        .route("/internal/hdc/weave/execute", post(hdc_weave_execute))
-        .route("/internal/hdc/weave/plan", post(hdc_weave_plan))
+        .nest("/internal", internal_routes)
         .with_state(ctx)
 }
 
@@ -99,9 +115,10 @@ async fn snapshot_state(
 async fn simulate_world(
     State(ctx): State<Arc<KernelContext>>,
     Json(request): Json<WorldSimulateRequest>,
-) -> Json<WorldSimulateResponse> {
+) -> Result<Json<WorldSimulateResponse>, ApiError> {
+    validate_text_size("action", &request.action, MAX_ACTION_BYTES)?;
     let _sid = request.session_id;
-    Json(ctx.world_model.simulate(&request.action))
+    Ok(Json(ctx.world_model.simulate(&request.action)))
 }
 
 async fn verify_patch(
@@ -148,6 +165,7 @@ async fn hdc_bind_template(
     State(ctx): State<Arc<KernelContext>>,
     Json(request): Json<HdcTemplateBindRequest>,
 ) -> Result<Json<HdcTemplateBindResponse>, ApiError> {
+    validate_bindings(&request.bindings)?;
     let response = ctx
         .hdc_memory
         .bind_template(&request)
@@ -170,6 +188,9 @@ async fn hdc_weave_execute(
     State(ctx): State<Arc<KernelContext>>,
     Json(request): Json<HdcWeaveExecuteRequest>,
 ) -> Result<Json<HdcWeaveExecuteResponse>, ApiError> {
+    validate_text_size("query", &request.query, MAX_WEAVE_QUERY_BYTES)?;
+    validate_bindings(&request.bindings)?;
+
     let query_response = ctx
         .hdc_memory
         .query_templates(&HdcTemplateQueryRequest {
@@ -190,6 +211,35 @@ async fn hdc_weave_execute(
             bindings: request.bindings.clone(),
         })
         .map_err(ApiError::bad_request)?;
+
+    let verifier_response = ctx.verifier.check(&VerifierRequest {
+        patch_ir: bind_response.bound_logic.clone(),
+        max_loop_iters: None,
+        side_effect_budget: Some(3),
+        timeout_ms: Some(80),
+    });
+    if !verifier_response.pass {
+        return Err(ApiError::unprocessable_with_violations(
+            "weave_execute rejected by verifier".to_string(),
+            verifier_response.violations,
+        ));
+    }
+
+    let simulation = ctx.world_model.simulate(&bind_response.bound_logic);
+    if simulation.risk_score > DEFAULT_WEAVE_EXECUTE_RISK_THRESHOLD {
+        return Err(ApiError::unprocessable_with_risk(
+            format!(
+                "weave_execute rejected by risk gate: {:.2} > {:.2}",
+                simulation.risk_score, DEFAULT_WEAVE_EXECUTE_RISK_THRESHOLD
+            ),
+            simulation.risk_score,
+            DEFAULT_WEAVE_EXECUTE_RISK_THRESHOLD,
+            vec![format!(
+                "risk_score_exceeded:{:.2}>{:.2}",
+                simulation.risk_score, DEFAULT_WEAVE_EXECUTE_RISK_THRESHOLD
+            )],
+        ));
+    }
 
     let jit_response = ctx
         .jit_engine
@@ -214,6 +264,9 @@ async fn hdc_weave_plan(
     State(ctx): State<Arc<KernelContext>>,
     Json(request): Json<HdcWeavePlanRequest>,
 ) -> Result<Json<HdcWeavePlanResponse>, ApiError> {
+    validate_text_size("query", &request.query, MAX_WEAVE_QUERY_BYTES)?;
+    validate_bindings(&request.bindings)?;
+
     let query_response = ctx
         .hdc_memory
         .query_templates(&HdcTemplateQueryRequest {
@@ -315,10 +368,39 @@ async fn hdc_weave_plan(
     }))
 }
 
+async fn require_internal_token(
+    State(expected_token): State<String>,
+    request: Request<axum::body::Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let provided = request
+        .headers()
+        .get(INTERNAL_TOKEN_HEADER)
+        .and_then(|value| value.to_str().ok());
+    if !provided.is_some_and(|value| constant_time_eq(value, expected_token.as_str())) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(next.run(request).await)
+}
+
+fn constant_time_eq(lhs: &str, rhs: &str) -> bool {
+    if lhs.len() != rhs.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (a, b) in lhs.as_bytes().iter().zip(rhs.as_bytes().iter()) {
+        diff |= a ^ b;
+    }
+    diff == 0
+}
+
 #[derive(Debug)]
 struct ApiError {
     status: StatusCode,
     message: String,
+    violations: Option<Vec<String>>,
+    risk_score: Option<f32>,
+    risk_threshold: Option<f32>,
 }
 
 impl ApiError {
@@ -326,6 +408,9 @@ impl ApiError {
         Self {
             status: StatusCode::BAD_REQUEST,
             message: err.to_string(),
+            violations: None,
+            risk_score: None,
+            risk_threshold: None,
         }
     }
 
@@ -333,6 +418,9 @@ impl ApiError {
         Self {
             status: StatusCode::NOT_FOUND,
             message,
+            violations: None,
+            risk_score: None,
+            risk_threshold: None,
         }
     }
 
@@ -340,6 +428,34 @@ impl ApiError {
         Self {
             status: StatusCode::INTERNAL_SERVER_ERROR,
             message: err.to_string(),
+            violations: None,
+            risk_score: None,
+            risk_threshold: None,
+        }
+    }
+
+    fn unprocessable_with_violations(message: String, violations: Vec<String>) -> Self {
+        Self {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            message,
+            violations: Some(violations),
+            risk_score: None,
+            risk_threshold: None,
+        }
+    }
+
+    fn unprocessable_with_risk(
+        message: String,
+        risk_score: f32,
+        risk_threshold: f32,
+        violations: Vec<String>,
+    ) -> Self {
+        Self {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            message,
+            violations: Some(violations),
+            risk_score: Some(risk_score),
+            risk_threshold: Some(risk_threshold),
         }
     }
 }
@@ -348,7 +464,114 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         let payload = Json(ErrorResponse {
             error: self.message,
+            violations: self.violations,
+            risk_score: self.risk_score,
+            risk_threshold: self.risk_threshold,
         });
         (self.status, payload).into_response()
+    }
+}
+
+fn validate_bindings(bindings: &HashMap<String, String>) -> Result<(), ApiError> {
+    let key_regex = Regex::new(r"^[A-Za-z0-9_-]{1,64}$").map_err(ApiError::internal)?;
+    let numeric_regex = Regex::new(r"^-?\d+$").map_err(ApiError::internal)?;
+    let safe_text_regex = Regex::new(r"^[A-Za-z0-9 _.,:/-]{1,64}$").map_err(ApiError::internal)?;
+
+    for (key, raw_value) in bindings {
+        if !key_regex.is_match(key) {
+            return Err(ApiError::unprocessable_with_violations(
+                format!("binding key `{key}` is invalid"),
+                vec![format!("binding_key_invalid:{key}")],
+            ));
+        }
+
+        let value = raw_value.trim();
+        if value.is_empty() {
+            return Err(ApiError::unprocessable_with_violations(
+                format!("binding value for `{key}` must not be empty"),
+                vec![format!("binding_value_empty:{key}")],
+            ));
+        }
+        if value.len() > MAX_BINDING_VALUE_BYTES {
+            return Err(ApiError::unprocessable_with_violations(
+                format!("binding value for `{key}` exceeds size limit"),
+                vec![format!("binding_value_too_large:{key}")],
+            ));
+        }
+
+        if numeric_regex.is_match(value) {
+            continue;
+        }
+
+        if !safe_text_regex.is_match(value) {
+            return Err(ApiError::unprocessable_with_violations(
+                format!("binding value for `{key}` contains unsafe characters"),
+                vec![format!("binding_value_invalid:{key}")],
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_text_size(field: &str, value: &str, max_bytes: usize) -> Result<(), ApiError> {
+    if value.is_empty() {
+        return Err(ApiError::bad_request(format!("{field} must not be empty")));
+    }
+    if value.len() > max_bytes {
+        return Err(ApiError::bad_request(format!(
+            "{field} exceeds max size: {}>{max_bytes} bytes",
+            value.len()
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use axum::extract::State;
+    use axum::http::StatusCode;
+    use axum::Json;
+
+    use crate::KernelContext;
+    use crate::models::{HdcTemplateUpsertRequest, HdcWeaveExecuteRequest};
+
+    use super::hdc_weave_execute;
+
+    #[tokio::test]
+    async fn weave_execute_rejects_logic_with_infinite_loop_pattern() {
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let snapshot_path = temp_dir.path().join("snapshots.redb");
+        let ctx = Arc::new(KernelContext::new(&snapshot_path).expect("create kernel context"));
+
+        ctx.hdc_memory
+            .upsert_template(&HdcTemplateUpsertRequest {
+                template_id: "danger_loop_template".to_string(),
+                logic_template: "add 1\n# zx_danger_loop while(true)".to_string(),
+                tags: vec!["zx_danger_loop".to_string()],
+            })
+            .expect("upsert dangerous template");
+
+        let result = hdc_weave_execute(
+            State(ctx),
+            Json(HdcWeaveExecuteRequest {
+                query: "zx_danger_loop".to_string(),
+                input: 9,
+                top_k: Some(1),
+                bindings: HashMap::new(),
+            }),
+        )
+        .await;
+
+        let err = match result {
+            Ok(_) => panic!("weave_execute should be rejected"),
+            Err(err) => err,
+        };
+        assert_eq!(err.status, StatusCode::UNPROCESSABLE_ENTITY);
+        let violations = err.violations.expect("violations should be present");
+        assert!(violations.iter().any(|v| v == "infinite_loop_risk"));
     }
 }
