@@ -51,6 +51,22 @@ cargo test -p vagi-kernel
 cd orchestrator && pytest
 ```
 
+## Train LKAN (Gen 2)
+
+Chuẩn bị dữ liệu:
+
+- Đặt file `data/input.txt` (TinyShakespeare) tại root repo.
+
+Chạy train:
+
+```bash
+cargo run -p vagi-kernel --release --bin train_lkan
+```
+
+Checkpoint sau train được lưu tại:
+
+- `models/lkan-gen2.safetensors`
+
 ## Genesis Run (Micro-Model)
 
 ```bash
