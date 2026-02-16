@@ -1,0 +1,16 @@
+[package]
+name = "lkan-poc"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+candle-core = { version = "0.8.2", default-features = false }
+candle-nn = { version = "0.8.2", default-features = false }
+rand = "0.9.1"
+
+[features]
+default = []
+cuda = ["candle-core/cuda", "candle-nn/cuda"]
+mkl = ["candle-core/mkl", "candle-nn/mkl"]
+accelerate = ["candle-core/accelerate", "candle-nn/accelerate"]

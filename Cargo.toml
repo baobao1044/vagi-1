@@ -1,4 +1,3 @@
 [workspace]
-members = ["kernel"]
+members = ["kernel", "lkan-poc"]
 resolver = "2"
-
