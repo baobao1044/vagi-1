@@ -14,8 +14,8 @@ const OUTPUT_PATH: &str = "models/lkan-genesis.safetensors";
 
 const BATCH_SIZE: usize = 32;
 const SEQ_LEN: usize = 64;
-const TRAIN_STEPS: usize = 1_000;
-const LOG_EVERY: usize = 100;
+const TRAIN_STEPS: usize = 5_000;
+const LOG_EVERY: usize = 200;
 const GENERATE_TOKENS: usize = 50;
 
 #[derive(Debug, Clone)]
@@ -182,16 +182,16 @@ fn main() -> Result<()> {
     let config = LKanGPTConfig {
         vocab_size,
         hidden_dim: 128,
-        num_layers: 4,
+        num_layers: 8,
         num_heads: 4,
         kan_config: LiquidKanConfig {
             in_dim: 128,
             hidden_dim: 128,
             out_dim: 128,
-            cheb_order: 5,
-            dt: 0.05,
-            tau_min: 1e-3,
-            x_scale: 2.0,
+            cheb_order: 3,
+            dt: 0.1,
+            tau_min: 1e-2,
+            x_scale: 1.0,
         },
     };
 
@@ -200,10 +200,11 @@ fn main() -> Result<()> {
     let model =
         LKanGPT::new(vb.pp("lkan_gpt"), config.clone()).context("failed to initialize LKanGPT")?;
 
+    let mut current_lr = 5e-4_f64;
     let mut optimizer = AdamW::new(
         var_map.all_vars(),
         ParamsAdamW {
-            lr: 3e-4,
+            lr: current_lr,
             weight_decay: 1e-2,
             ..Default::default()
         },
@@ -219,6 +220,12 @@ fn main() -> Result<()> {
         let loss_value = loss.to_scalar::<f32>()?;
 
         optimizer.backward_step(&loss)?;
+
+        if step % 1_000 == 0 {
+            current_lr *= 0.8;
+            optimizer.set_learning_rate(current_lr);
+            println!(" Decaying LR to {:.6e}", current_lr);
+        }
 
         if step % LOG_EVERY == 0 {
             println!("step {:4} | loss {:.6}", step, loss_value);
