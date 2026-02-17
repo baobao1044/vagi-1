@@ -1,0 +1,84 @@
+name: Build Trainer Binary
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - "kernel/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build-${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            src_binary: target/x86_64-unknown-linux-gnu/release/train_lkan
+            out_binary: vagi-trainer-linux
+            artifact_name: vagi-trainer-linux
+          - name: windows
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            src_binary: target/x86_64-pc-windows-msvc/release/train_lkan.exe
+            out_binary: vagi-trainer-windows.exe
+            artifact_name: vagi-trainer-windows.exe
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+
+      - name: Build train_lkan (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          cargo build --release --bin train_lkan --target "${{ matrix.target }}"
+
+      - name: Build train_lkan (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: kernel
+        run: |
+          $ErrorActionPreference = "Stop"
+          cargo build --release --bin train_lkan --target "${{ matrix.target }}"
+
+      - name: Prepare artifact (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: kernel
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          test -f "${{ matrix.src_binary }}"
+          cp "${{ matrix.src_binary }}" "dist/${{ matrix.out_binary }}"
+          chmod +x "dist/${{ matrix.out_binary }}"
+
+      - name: Prepare artifact (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: kernel
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          if (!(Test-Path "${{ matrix.src_binary }}")) { throw "Binary not found: ${{ matrix.src_binary }}" }
+          Copy-Item "${{ matrix.src_binary }}" "dist/${{ matrix.out_binary }}" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: kernel/dist/${{ matrix.out_binary }}
+          if-no-files-found: error
