@@ -129,6 +129,10 @@ pub struct ModelStatusResponse {
 pub struct ModelInferRequest {
     pub prompt: String,
     pub max_new_tokens: Option<usize>,
+    /// Enable System 2 "deep thought" reasoning mode.
+    pub use_reasoning: Option<bool>,
+    /// Number of thinking iterations (default: 50).
+    pub thinking_iterations: Option<usize>,
 }
 
 #[derive(Debug, Serialize)]
@@ -137,6 +141,37 @@ pub struct ModelInferResponse {
     pub text: String,
     pub tokens_generated: usize,
     pub latency_ms: u64,
+    /// Present when `use_reasoning = true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub think_trace: Option<ThinkTrace>,
+}
+
+/// Trace metadata from System 2 reasoning.
+#[derive(Debug, Clone, Serialize)]
+pub struct ThinkTrace {
+    pub nodes_explored: usize,
+    pub best_score: f32,
+    pub branches_pruned: usize,
+    pub think_latency_ms: u64,
+    pub verifier_pass: bool,
+    pub iterations_completed: usize,
+    pub best_depth: u32,
+    /// Chronological log of the thinking process (e.g. "Selected node 5 -> Expanded 3 children").
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub process_log: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", content = "content")]
+pub enum ThinkingEvent {
+    #[serde(rename = "thought")]
+    Thought(String),
+    #[serde(rename = "token")]
+    Token(String),
+    #[serde(rename = "summary")]
+    Summary(ThinkTrace),
+    #[serde(rename = "done")]
+    Done,
 }
 
 #[derive(Debug, Deserialize)]
@@ -199,4 +234,85 @@ pub struct MemoryEmbedRequest {
 pub struct MemoryEmbedResponse {
     pub vector: Vec<f32>,
     pub dim: usize,
+}
+
+// ─── Homeostasis ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize)]
+pub struct HomeostasisStatusResponse {
+    pub dopamine: f32,
+    pub cortisol: f32,
+    pub oxytocin: f32,
+    pub energy: f32,
+    pub mood: String,
+    pub mood_description: String,
+}
+
+// ─── Knowledge Graph ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct KnowledgeAddRequest {
+    pub subject: String,
+    pub relation: String,
+    pub object: String,
+    pub subject_type: Option<String>,
+    pub object_type: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct KnowledgeAddResponse {
+    pub nodes: usize,
+    pub edges: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct KnowledgeQueryRequest {
+    pub node: String,
+    pub direction: Option<String>, // "causes", "effects", "path"
+    pub target: Option<String>,    // for path queries
+    pub max_depth: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct KnowledgeQueryResponse {
+    pub query_node: String,
+    pub chains: Vec<Vec<CausalStepDto>>,
+    pub pagerank_top: Vec<(String, f32)>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CausalStepDto {
+    pub from: String,
+    pub relation: String,
+    pub to: String,
+    pub strength: f32,
+}
+
+// ─── Affect ──────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct AffectDetectRequest {
+    pub text: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AffectDetectResponse {
+    pub valence: f32,
+    pub arousal: f32,
+    pub dominance: f32,
+    pub trust: f32,
+    pub label: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AffectModulateResponse {
+    pub target_valence: f32,
+    pub target_arousal: f32,
+    pub target_dominance: f32,
+    pub target_trust: f32,
+    pub warmth: f32,
+    pub formality: f32,
+    pub encouragement: f32,
+    pub humor: f32,
+    pub suggested_framing: String,
 }
