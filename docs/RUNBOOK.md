@@ -78,3 +78,10 @@ Trainer hiện đã tích hợp:
 
 Theo dõi log:
 - `logic_penalty`, `causal_norm`, `epi_suppr`, `ternary_nz`, `sophia_clip`, `prefetch_loaded`, `hdc_rel`
+
+## 8) Progress & Benchmark
+
+- Báo cáo tiến độ + so sánh baseline vs bản hiện tại:
+  - `docs/TITANIUM_PROGRESS_2026-02-19.md`
+- Protocol benchmark throughput/logic quality:
+  - `docs/TITANIUM_PROGRESS_2026-02-19.md` (mục 4)

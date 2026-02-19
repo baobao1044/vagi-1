@@ -31,6 +31,21 @@ vAGI Titanium là nhánh kernel/orchestrator theo hướng CPU-first, tập trun
 - Sophia-G + bit-sliced + causal + epigenetic hiện điều khiển/update trên optimizer-side shadow state.
 - Đây là trạng thái triển khai hiện tại của Gen-1 Alpha (không phải benchmark final).
 
+## Delta vs. Baseline
+
+So với nhánh baseline trước Titanium trainer integration:
+
+| Hạng mục | Baseline cũ | Bản hiện tại |
+| :--- | :--- | :--- |
+| Training loop | CE loss + AdamW | CE + verifier penalty + causal signal + epigenetic + Sophia shadow |
+| Verifier coupling | Scalar penalty | Scalar penalty + violations feed + module attribution signal |
+| MoE memory path | On-demand load | Lookahead prefetch bằng worker thread |
+| Long-context memory prior | Chưa có recursive compressor | Recursive HDC master (8192-bit) |
+| CPU kernel | Chưa có AVX-512 Hessian path | Có AVX-512 path + Rayon parallel fallback |
+
+Chi tiết tiến độ, benchmark protocol, và ghi chú research:
+- `docs/TITANIUM_PROGRESS_2026-02-19.md`
+
 ## Run
 
 ### Kernel

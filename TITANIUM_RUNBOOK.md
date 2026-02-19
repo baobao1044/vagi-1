@@ -47,3 +47,11 @@ Biến môi trường tùy chọn:
 
 - Model tensor update vẫn dùng backend optimizer tương thích autograd của Candle.
 - Causal/Sophia/Bit-sliced/Epigenetic hiện kiểm soát optimizer-side shadow dynamics.
+
+## 6. Baseline Comparison Quick View
+
+- Baseline cũ: CE + AdamW, không prefetch, không recursive HDC, không causal vector injection.
+- Bản hiện tại: CE + verifier-guided controls + causal signal + epigenetic mask + prefetch + recursive HDC.
+
+Tài liệu so sánh đầy đủ và benchmark protocol:
+- `docs/TITANIUM_PROGRESS_2026-02-19.md`

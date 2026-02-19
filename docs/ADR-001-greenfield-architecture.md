@@ -39,5 +39,9 @@ Hiện trạng alpha:
 | **Memory Footprint** | 40GB+ | < 4GB |
 | **Reasoning Depth** | Probabilistic | Verified Causal |
 
+> Note: bảng trên là mục tiêu kiến trúc/định hướng.  
+> Số liệu benchmark thực nghiệm hiện tại được theo dõi riêng tại:
+> `docs/TITANIUM_PROGRESS_2026-02-19.md`.
+
 ## Research & Validation
 Dựa trên nghiên cứu về BitNet 1.58b (Microsoft) và Sophia Optimizer (Stanford), chúng tôi đã mở rộng bằng cách tích hợp **Epigenetic Masking** (Điều biến biểu gen). Kết quả thực nghiệm cho thấy sự kết hợp này giúp mô hình không bị hiện tượng "Catastrophic Forgetting" (Quên kiến thức cũ).
